@@ -34,6 +34,7 @@ struct  {
     char array[7];
 }char_arr;
 
+
 static ssize_t device_read(struct file *file, char *buf, size_t size, loff_t *offset){
     int count = *offset;
     char user_buff[10000];
@@ -164,12 +165,33 @@ static ssize_t device_write(struct file *filp,const char *buf,size_t count,loff_
     }
     return count;
 }
+static ssize_t device_open(int user_p , int file_p , char file_path[] , int mode){
+    if (user_p > file_p && mode == 1)
+    {
+        open(file_path , 777 ,O_WRONLY);
+    }
+    else if(user_p<file_p && mode == 2){
+        open(file_path,777,O_RDONLY);
+    }
+    else if (user_p == file_p)
+    {
+        open(file_path,777 , O_RDWR);
+    }
+    else
+    {
+        printk(KERN_INFO "boro kiram dahanet");
+    }
+    
+    
+    
+}
 
 const struct file_operations task_file_operation = {
     .owner = THIS_MODULE,
     .read = device_read,
     .llseek = device_llseek,
     .write = device_write,
+    .open = device_open,
 };
 
 static int task_init(void){
