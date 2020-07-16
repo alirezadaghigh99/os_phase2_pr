@@ -146,23 +146,27 @@ static loff_t device_llseek(struct file *file, loff_t position, int whence)
     }  
     return position;
 }
+struct File
+{
+    char path[50];
+    int state;
+}files[50];
+struct User
+{
+    int id;
+    int state;
+}users[50];
+
 //new added
 static ssize_t device_write(struct file *filp,const char *buf,size_t count,loff_t *offset)
 {
     unsigned long ret;
-    if (count > sizeof(char_arr.array) - 1)
+    if (count > sizeof(files) - 1)
         return -EINVAL;
-    ret = copy_from_user(char_arr.array, buf, count);
+    ret = copy_from_user(files, buf, count);
     if (ret)
         return -EFAULT;
-    char_arr.array[count] = '\0';
-    int x;
-    int i;
-    for (i = count - 1; i >= 0; i--) {
-	num *= 10;
-	x = char_arr.array[i] - '0';
-	num += x;
-    }
+   
     return count;
 }
 static ssize_t device_open(int user_p , int file_p , char file_path[] , int mode){
