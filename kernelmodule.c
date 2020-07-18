@@ -1,24 +1,32 @@
-#include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sched.h>
+#include <linux/rcupdate.h>
+#include <linux/fdtable.h>
 #include <linux/fs.h>
-#include <linux/mutex.h>
-#include <linux/device.h>
+#include <linux/fs_struct.h>
+#include <linux/dcache.h>
+#include <linux/slab.h>
+#include <linux/kernel.h>
+#include <asm/uaccess.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
-#include <linux/kdev_t.h>
-#include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/rcupdate.h>
+#include <linux/proc_fs.h>
 #include <linux/pid.h>
-#include <linux/fs_struct.h>
-#include <linux/fdtable.h>
-#include <linux/dcache.h>
+#include <linux/pid_namespace.h>
+#include <linux/kallsyms.h>
+#include <linux/moduleparam.h>
+#include <linux/unistd.h>
+#include <asm/cacheflush.h>
+#include <asm/paravirt.h>
 
+#include <linux/uidgid.h>
 #define MODULE
 #define LINUX
 #define __KERNEL__
 #define GFP_KERNEL      (__GFP_RECLAIM | __GFP_IO | __GFP_FS)
+#define CR0_PROT 0x00010000
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Alireza Nima Sina");
@@ -28,110 +36,56 @@ MODULE_DESCRIPTION("phase1");
 static dev_t task_device = 0;
 static struct cdev *task_cdev;
 static struct class *task_class;
-int num = 0;
-
+static int starter = 0;
+int numOfUsers = 0;
+int numOfFiles = 0;
+unsigned long *sysCallTable;
+asmlinkage int (*addressCall)(const char*, int, int);
+struct User
+{
+    int id;
+    int userPrivacy;
+}users[100];
+struct File
+{
+    char path[50];
+    int filePrivacy;
+}files[100];
 struct  {
-    char array[7];
+    char array[1000];
 }char_arr;
 
+asmlinkage int device_open(const char* file, int flags , int mode)
+{
+	uid_t userId = get_current_user()->uid.val;
+    int userAccessTemp = 1;
+    int fileAccessTemp = 1;
+    for (int i = 0; i < 100; i++)
+    {
+        if (users[i].id == userId)
+        {
+            userAccessTemp = users[i].userPrivacy;
+            break;
+        }
+        
+    }
+    for (int i = 0; i < 100; i++)
+    {
+        if (strcmp(files[i].path , file) == 0 )
+        {
+            fileAccessTemp = files[i].filePrivacy;
+            break;
+        }
+        
+    }
+    
+    
+}
 
 static ssize_t device_read(struct file *file, char *buf, size_t size, loff_t *offset){
-    int count = *offset;
-    char user_buff[10000];
-    pid_t pid = num;
-    struct task_struct *tsk;
-    tsk = pid_task(find_vpid(pid), PIDTYPE_PID);
-    int state = tsk->state;
-    unsigned long nvcsw = tsk->nvcsw;
-    unsigned long nvcswTemp = nvcsw;
-    unsigned long nivcsw = tsk->nivcsw;
-    unsigned long nivcswTemp = nivcsw;
-    int lenOfNivcsw = 0;
-    int l2 = 0;
+    //int count = *offset;
     
-    int lenOfNvcsw = 0;
-    int l1 = 0;
-    while(nvcswTemp > 0){
-        lenOfNvcsw++;
-        nvcswTemp /= 10;
-    }
-    while(nivcswTemp > 0){
-        lenOfNivcsw++;
-        nivcswTemp/= 10;
-    }
-
-    char nvcswRev[lenOfNvcsw];
-    char nivcswRev[lenOfNivcsw];
-    int k = 0;
-    int len = 0;
-    int temp = state;
-    while(temp > 0) {
-        len++;
-        temp /= 10;
-    }
-    int j = 0;
-    char revState[len];
-    while(state > 0) {
-        revState[j] = '0' + state % 10;
-        state /= 10;
-        j++;
-    }
-    while (nvcsw > 0){
-        nvcswRev[l1] = '0' + nvcsw % 10;
-        nvcsw /= 10;
-        l1++;
-    }
-    while (nivcsw > 0){
-        nivcswRev[l2] = '0' + nivcsw % 10;
-        nivcsw /= 10;
-        l2++;
-    }
-    char states[len];
-    for (j = 0 ; j < len ; j++){
-        user_buff[j] = revState[len - j - 1];
-
-    }
-    user_buff[j] = '\n';
-    j++;
-    int cu = j;
-    for (j = cu ; j < cu + lenOfNvcsw ; j++){
-        user_buff[j] = nvcswRev[lenOfNvcsw - j + 1];
-    }
-    user_buff[j] = '\n';
-    j++;
-    cu = j;
-    for (j = cu ; j < cu + lenOfNivcsw ; j++){
-        user_buff[j] = nivcswRev[lenOfNivcsw + lenOfNvcsw + len - j + 1];
-    }
-    user_buff[j] = '\n';
-    j++;
-    cu = j; 
-    struct files_struct *current_files;
-    struct fdtable *files_table;
-    unsigned int *fds;
-    int i = 0;
-    struct path files_path;
-    char *cwd;
-    char *buffer_2 = (char *) kmalloc(100 * sizeof(char), GFP_KERNEL); 
-    current_files = tsk->files;
-    files_table = files_fdtable(current_files);
-    size_t i1;
-    while (files_table->fd[i] != NULL) {
-        files_path = files_table->fd[i]->f_path;
-        cwd = d_path(&files_path, buffer_2, 100 * sizeof(char));
-        i1 = 0;
-
-        while (cwd[i1] != '\0') {
-            user_buff[j] = cwd[i1];
-            i1++;
-            j++;
-        }
-    	user_buff[j] = '\n';
-    	j++;
-        i++;
-    }
-    user_buff[j] = '\0';
-    copy_to_user(buf, user_buff, j);
+    //copy_to_user(buf, user_buff, j);
     return 1;
 }
 
@@ -146,56 +100,84 @@ static loff_t device_llseek(struct file *file, loff_t position, int whence)
     }  
     return position;
 }
-struct File
-{
-    char path[50];
-    int state;
-}files[50];
-struct User
-{
-    int id;
-    int state;
-}users[50];
 
 //new added
 static ssize_t device_write(struct file *filp,const char *buf,size_t count,loff_t *offset)
 {
     unsigned long ret;
-    if (count > sizeof(files) - 1)
+    if (count > sizeof(char_arr.array) - 1)
         return -EINVAL;
-    ret = copy_from_user(files, buf, count);
+    ret = copy_from_user(char_arr.array, buf, count);
     if (ret)
         return -EFAULT;
-   
+    
+    int i=0;
+    int j=0;
+    int x;
+    while (1)
+    {
+        x=0;
+	users[j].id = 0;
+        while (char_arr.array[i]!='%')
+        {
+	    
+            int c = char_arr.array[i] - '0';
+	    users[j].id *= 10;
+	    users[j].id += c;
+            i++;
+            x++;
+        }
+        i++;
+        users[j].userPrivacy = char_arr.array[i] - '0';
+        i+=2;
+        j++;
+        if (char_arr.array[i]=='?')
+        {
+            i++;
+            break;
+        }
+    }
+    numOfUsers = j;
+    j=0;
+    while (1)
+    {
+        x=0;
+        while (char_arr.array[i]!='%')
+        {
+            
+            files[j].path[x]=char_arr.array[i];
+            i++;
+            x++;
+        }
+        i++;
+        files[j].filePrivacy = char_arr.array[i] - '0';
+        i+=2;
+        j++;
+        if (char_arr.array[i]=='\0')
+        {
+            break;
+        }
+    }
+    numOfFiles = j;
+    for (int i = 0; i < j; i++)
+    {
+        printk(KERN_ALERT "name of file %d \n",users[i].id);
+    }
+    sysCallTable = kallsyms_lookup_name("sys_call_table");
+    addressCall = (void*) sysCallTable[__NR_open];
+    unsigned long cr0 = read_cr0();
+    write_cr0(cr0 & ~CR0_PROT);
+    sysCallTable[__NR_open] = (unsigned long)(&device_open);
+    write_cr0(cr0);
     return count;
 }
-static ssize_t device_open(int user_p , int file_p , char file_path[] , int mode){
-    if (user_p > file_p && mode == 1)
-    {
-        open(file_path , 777 ,O_WRONLY);
-    }
-    else if(user_p<file_p && mode == 2){
-        open(file_path,777,O_RDONLY);
-    }
-    else if (user_p == file_p)
-    {
-        open(file_path,777 , O_RDWR);
-    }
-    else
-    {
-        printk(KERN_INFO "boro kiram dahanet");
-    }
-    
-    
-    
-}
+
 
 const struct file_operations task_file_operation = {
     .owner = THIS_MODULE,
     .read = device_read,
     .llseek = device_llseek,
     .write = device_write,
-    .open = device_open,
 };
 
 static int task_init(void){

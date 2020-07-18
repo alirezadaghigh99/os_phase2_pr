@@ -6,13 +6,13 @@
 #include <unistd.h>
 struct User
 {
-    int id;
+    char id[10];
     char userPrivacy;
 };
 struct File
 {
     char path[50];
-    int filePrivacy;
+    char filePrivacy;
 };
 
 int main(){
@@ -21,44 +21,84 @@ int main(){
     int offset;
     int numberOfUsers;
     int numberOfFiles;
-    struct User users[numberOfUsers];
-    struct File files[numberOfFiles];
+
     int id , state;
     char path[50];
     
+    int k = 0;
+    char temp[10000];
+    int j = 0;
 
     printf("enter number of users: ");
     scanf("%d",&numberOfUsers);
     printf("enter number of files: ");
     scanf("%d",&numberOfFiles);
+    struct User users[numberOfUsers];
+    struct File files[numberOfFiles];
     for (int i = 0; i < numberOfUsers; i++)
     {
         printf("enter id and state of %dth user: ",i+1);
-        scanf("%d %d",&id , &state);
-        users[i].id = id;
-        users[i].userPrivacy = state;
+        scanf("%s %c",users[i].id , &users[i].userPrivacy);
     }
     for (int i = 0; i < numberOfFiles; i++)
     {
         printf("enter path and state of %dth file: ",i+1);
-        scanf("%s %d",files[i].path , &state);
-        files[i].filePrivacy = state;
+        scanf("%s %c",files[i].path , &files[i].filePrivacy);
     }
     
     
     int file_device = open("/dev/first_phase" , O_RDWR);
-    char pid[7];
-    int i = 0, c;
-    int copy = offset;
-    while (copy > 0) {
-	c = copy % 10;
-	pid[i] = '0' + c;
-	i++;
-	copy /= 10;
+    
+    int i = 0;
+    for(j=0 ; j<numberOfUsers ; j++)
+    {
+        int x=0;
+        while (1)
+        {
+            if (users[j].id[x]!='\0')
+            {
+                temp[i]=users[j].id[x];
+                i++;
+                x++;
+            }
+            temp[i]='%';
+            i++;
+            break;
+        }
+        temp[i]=users[j].userPrivacy;
+        i++;
+        temp[i]='%';
+        i++;
     }
-    write(file_device, pid, i);
+
+    temp[i]='?';
+    i++;
+
+    for(j=0 ; j<numberOfFiles ; j++)
+    {
+        int x=0;
+        while (1)
+        {
+            if (files[j].path[x]!='\0')
+            {
+                temp[i]=files[j].path[x];
+                i++;
+                x++;
+            }
+            temp[i]='%';
+            i++;
+            break;
+        }
+        temp[i]=files[j].filePrivacy;
+        i++;
+        temp[i]='%';
+        i++;
+    }
+    
+    temp[i]='\0';
+    write(file_device, temp, i);
     int count = 0, s;
-    int temp = 0;
+    
   //  while(count != 10) {
 	// usleep(period * 1000000);
     //     lseek(file_device, i + 10000 * (count + 1), SEEK_SET);
